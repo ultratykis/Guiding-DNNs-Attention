@@ -1,4 +1,3 @@
-
 [submodule "ui"]
-	path = ui
-	url = https://github.com/ultratykis/User-Interface-For-Guiding-DNNs-Attention.git
+path = ui
+url = https://github.com/ultratykis/User-Interface-For-Guiding-DNNs-Attention.git
