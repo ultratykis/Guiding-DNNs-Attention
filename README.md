@@ -11,10 +11,7 @@ Code for the paper [Efficient Human-in-the-loop System for Guiding DNNs Attentio
           <test>/
           <val>/
   ```
-- Set up the environment.
-  ```bash
-  conda env create -f=env.yml
-  ```
+- Set up the environment with Dockerfile.
 - Run the app.
   ```
   python app.py
