@@ -29,7 +29,7 @@ def train(dataset_path, network_path):
     optimizer = optim.Adam(net.parameters(), lr=0.1)
     best_loss = 0.0
 
-    for epoch in range(150):
+    for epoch in range(50):
         running_loss = 0.0
         net.train()
 
@@ -57,6 +57,8 @@ def train(dataset_path, network_path):
             # Save the model as checkpoint.
             print('epoch:', epoch, "update best loss: {}, Saving model...".format(
                 best_loss))
+            if not os.path.exists(network_path):
+                os.mkdir(network_path)
             torch.save(
                 {
                     'model_state_dict': net.state_dict(),
@@ -133,3 +135,7 @@ def get_accuracy(outputs, labels):
         batch_class_correct[label] += c[i].item()
 
     return batch_total, batch_correct, batch_class_total, batch_class_correct
+
+
+if __name__ == "__main__":
+    train("./datasets/coco-2017/", "./checkpoints/")

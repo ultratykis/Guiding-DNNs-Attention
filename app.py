@@ -1,7 +1,5 @@
 import base64
-import datetime
 import os
-import time
 
 import cv2
 import numpy as np
@@ -34,7 +32,7 @@ val_set = None
 loader_iter = None
 candidates = []
 test_candidates = []
-checkpoint_dir = './results/checkpoints'
+checkpoint_dir = './checkpoints'
 train_batch_size = 128
 added_number = 128
 learnings_rate = 0.1
@@ -46,17 +44,9 @@ train = True
 dataset = ""
 selected_indices = []
 candidates_sampling_strategy = "random"
-time_point_start = 0.
-time_point_stop = 0.
-time_point_start_refine = 0.
-time_point_end_refine = 0.
-time_sum = 0.
-time_stats = []
-experiment_id = "0"
-experiment_stage = "EXPERIMENT_"
+experiment_id = None
 class_labels = None
 annotation_method = "click"
-scene = "random_click"
 
 
 @app.route('/', defaults={'path': ''})
@@ -80,14 +70,10 @@ def start():
     global candidates_sampling_strategy
     global time_point_start
     global annotation_method
-    global scene
     global cycle
 
     reset_params()
     experiment_id = request.json["experiment_id"]
-    dt_today = datetime.datetime.now()
-    experiment_id = experiment_stage + experiment_id + "_" + \
-        str(dt_today.month) + str(dt_today.day)
     learnings_rate = float(request.json["learnings_rate"])
     train_batch_size = int(request.json["batch_size"])
     epoch = int(request.json["epoch"])
@@ -105,21 +91,10 @@ def start():
     else:
         annotation_method = "polygon"
 
-    for stra_ in ["random", "entropy", "diversity", "attention"]:
-        candidates_sampling_strategy = stra_
-        print("strategy: {}".format(candidates_sampling_strategy))
-        for trail in range(5):
-            reset_params()
-
-            scene = candidates_sampling_strategy + "_" + annotation_method
-            load_network()
-
-            candidates_final = candidates_update()
-            time_point_start = time.time()
-            cycle = 0
-            print("Trial {}...".format(trail))
-            for idx in range(5):
-                finetune()
+    reset_params()
+    load_network()
+    candidates_final = candidates_update()
+    cycle = 0
     return jsonify(({"response_type": "started", "cycle": cycle,
                      "iter": show_iter,
                      "show_batch_size": show_batch_size, "candidates": candidates_final}))
@@ -150,33 +125,16 @@ def stop():
     return jsonify(({"response_type": "stopped"}))
 
 
-# @app.route('/finetune', methods=['post'])
+@app.route('/finetune', methods=['post'])
 def finetune():
-    global time_point_start
-    global time_point_stop
     global show_iter
     global cycle
-    global time_sum
-    global time_stats
 
-    time_point_stop = time.time()
-    time_sum = time_point_stop - time_point_start
-    if not os.path.exists("./result/statistics/{}".format(experiment_id)):
-        os.makedirs(
-            "./result/statistics/{}".format(experiment_id))
-    if not os.path.exists(os.path.join("./result/statistics/{}".format(experiment_id), 'time_sum_{}.txt'.format(scene))):
-        with open(os.path.join("./result/statistics/{}".format(experiment_id), 'time_{}.txt'.format(scene)), 'a') as f:
-            f.write("scene, cycle, iter, time cost, time average\n")
-
-    time_average = np.array(time_stats).mean()
-
-    msg = "{}, {}, {}, {}, {}\n".format(
-        scene, cycle, show_iter, time_sum, time_average)
-    with open(os.path.join("./result/statistics/{}".format(experiment_id), 'time_sum_{}.txt'.format(scene)), 'a') as f:
-        f.write(msg)
-    time_point_start = time.time()
     next_button_click()
     candidates_final = candidates_update()
+    return jsonify(({"response_type": "started", "cycle": cycle,
+                     "iter": show_iter,
+                     "show_batch_size": show_batch_size, "candidates": candidates_final}))
 
 
 @app.route('/annotation_style', methods=['post'])
@@ -187,35 +145,6 @@ def switch_annotation_style():
         return jsonify(({"response_type": "annotation_style", "annotation_method": annotation_method}))
     else:
         return jsonify({"response_type": "unknown request"})
-
-
-@app.route('/refine-start', methods=['post'])
-def refine_start():
-    global time_point_start_refine
-    time_point_start_refine = time.time()
-    return jsonify({"response_type": "refine-start"})
-
-
-@app.route('/refine-end', methods=['post'])
-def refine_end():
-    global time_point_end_refine
-    global time_stats
-
-    refine_id = request.json["refine_id"]
-    time_point_end_refine = time.time()
-    if not os.path.exists("./result/statistics/{}".format(experiment_id)):
-        os.makedirs(
-            "./result/statistics/{}".format(experiment_id))
-    if not os.path.exists(os.path.join("./result/statistics/{}".format(experiment_id), 'time_{}.txt'.format(scene))):
-        with open(os.path.join("./result/statistics/{}".format(experiment_id), 'time_{}.txt'.format(scene)), 'a') as f:
-            f.write("scene, refine id, time cost\n")
-
-    msg = "{}, {}, {}\n".format(scene, refine_id,
-                                time_point_end_refine - time_point_start_refine)
-    with open(os.path.join("./result/statistics/{}".format(experiment_id), 'time_{}.txt'.format(scene)), 'a') as f:
-        f.write(msg)
-    time_stats.append(time_point_end_refine - time_point_start_refine)
-    return jsonify({"response_type": "refine-end"})
 
 
 @app.route('/refine_cam', methods=['post'])
@@ -275,7 +204,7 @@ def load_network():
         pretrained_network_file, map_location=torch.device('cuda'))['model_state_dict'])
 
     active_learning = Uncertainty(network.cuda(), added_number, train_set, uncertainty_train_set, test_set, val_set,
-                                  train_batch_size, subset_number=512, sample_type=candidates_sampling_strategy, num_classes=num_classes, experiment_id=experiment_id, scene=scene)
+                                  train_batch_size, subset_number=512, sample_type=candidates_sampling_strategy, num_classes=num_classes)
     active_learning.set_hyperparams(
         epoch, lr=learnings_rate, milestones=[6, 12], wdecay=weight_decay)
     print("model loaded.")
@@ -360,7 +289,7 @@ def next_button_click():
         show_next()
 
 
-def get_guidance(random_points=True):
+def get_guidance(random_points=False):
     global show_batch_size
     global candidates
     global show_iter
@@ -451,5 +380,4 @@ def get_random_neg(img):
 
 
 if __name__ == '__main__':
-
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)

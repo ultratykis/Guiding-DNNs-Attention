@@ -10,39 +10,34 @@ import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from sklearn.mixture import GaussianMixture
-from lib.data import SubsetSequentialSampler, UnNormalize
+from lib.data import SubsetSequentialSampler
 
 from pytorch_grad_cam import GradCAM
 
 
 class Uncertainty:
-    def __init__(self, model, added_number, train_set, unlabeled_set, test_set, val_set, batch, subset_number, sample_type="entropy", num_classes=4, experiment_id="", scene=""):
-        self.train_number = len(train_set)
+    def __init__(self, model, added_number, train_set, unlabeled_set, test_set, val_set, batch, subset_number, sample_type, num_classes):
         self.added_number = added_number
         self.train_set = train_set
         self.unlabeled_set = unlabeled_set
         self.batch = batch
         self.sample_type = sample_type
         self.num_classes = num_classes
-        self.experiment_id = experiment_id
-        self.scene = scene
         self.best_loss = 0.0
         self.running_loss = 0.0
         self.best_acc = [0.0, 0.0, 0.0]
-        indices = list(range(self.train_number))
-
+        indices = list(range(len(train_set)))
         random.shuffle(indices)
         self.labeled_set_id = indices[:self.added_number]
         self.unlabeled_set_id = indices[self.added_number:]
 
-        self.train_loader = DataLoader(self.train_set, batch_size=batch,
+        self.train_loader = DataLoader(self.train_set, batch_size=self.batch,
                                        sampler=SubsetRandomSampler(self.labeled_set_id), pin_memory=True)
-        self.test_loader = DataLoader(test_set, batch_size=batch)
-        self.val_loader = DataLoader(val_set, batch_size=batch, shuffle=True)
+        self.test_loader = DataLoader(test_set, batch_size=self.batch)
+        self.val_loader = DataLoader(
+            val_set, batch_size=self.batch, shuffle=True)
 
         self.model = model
-        self.un_norm = UnNormalize(
-            mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
         torch.backends.cudnn.benchmark = True
         self.subset_number = subset_number
         # initialize grad-cam class
@@ -62,11 +57,9 @@ class Uncertainty:
         self.cycle = 0
 
     def learn(self, checkpoint_dir):
-        # self.criterion = nn.CrossEntropyLoss(reduction='none')
         self.criterion = nn.CrossEntropyLoss(reduction='mean')
         self.optimizer = optim.Adam(self.model.parameters(
         ), lr=self.lr, weight_decay=self.wdecay)
-        # self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
         self.scheduler = lr_scheduler.MultiStepLR(
             self.optimizer, milestones=self.milestones)
 
@@ -75,21 +68,9 @@ class Uncertainty:
             self.train(checkpoint_dir)
             self.best_acc = self.test()
 
-            # save accuracy, loss, etc.
-            if not os.path.exists("./result/statistics/{}".format(self.experiment_id)):
-                os.makedirs(
-                    "./result/statistics/{}".format(self.experiment_id))
-            if not os.path.join("./result/statistics/{}".format(self.experiment_id), 'train_{}.txt'.format(self.scene)):
-                with open(os.path.join("./result/statistics/{}".format(self.experiment_id), 'train_{}.txt'.format(self.scene)), 'a') as f:
-                    f.write(
-                        "iters, total acc, acc 1, acc 2\n")
-
             msg = "{}, {}, {}, {}\n".format(
                 self.cycle, self.best_acc[0], self.best_acc[1], self.best_acc[2])
             print(msg)
-
-            with open(os.path.join("./result/statistics/{}".format(self.experiment_id), 'train_{}.txt'.format(self.scene)), 'a') as f:
-                f.write(msg)
 
         #  Update the labeled dataset via loss prediction-based uncertainty measurement
 
@@ -184,14 +165,10 @@ class Uncertainty:
         self.running_loss = 0.0
         self.best_loss = 0.0
 
-        model_path = os.path.join(
-            checkpoint_dir, '{}/{}'.format(self.experiment_id, self.scene))
         savepath_best = os.path.join(
-            model_path, 'al_best.pth'.format(self.cycle))
+            checkpoint_dir, 'al_best.pth'.format(self.cycle))
         savepath_final = os.path.join(
-            model_path, 'al_latest.pth'.format(self.cycle))
-        if not os.path.exists(model_path):
-            os.makedirs(model_path)
+            checkpoint_dir, 'al_latest.pth'.format(self.cycle))
 
         print("Training...")
         for epoch in range(self.epoch):
@@ -301,7 +278,6 @@ class Uncertainty:
         return uncertainty.cpu()
 
     def random_based(self, prob_dist):
-
         random_indices = torch.randperm(prob_dist.shape[0]).cuda()
 
         return random_indices

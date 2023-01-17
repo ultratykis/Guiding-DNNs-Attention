@@ -133,27 +133,3 @@ def store_evolution_in(lst):
         lst.append(np.copy(x))
 
     return _store
-
-
-def generate_gaussian_distribution(size=224, fwhm=32, center_cordinate=None):
-    """ Make a square gaussian kernel.
-
-    size: the length of a side of the square
-    fwhm: full-width-half-maximum, which
-    can be thought of as an effective radius.
-    center_cordinate: the click cordinate
-    """
-
-    x = np.arange(0, size, 1, float)
-    y = x[:, np.newaxis]
-
-    if center_cordinate is None:
-        x0 = y0 = size // 2
-    else:
-        x0 = center_cordinate[0]
-        y0 = center_cordinate[1]
-
-    gaussian_distribution = np.exp(-4*np.log(2)
-                                   * ((x-x0)**2 + (y-y0)**2) / fwhm**2)
-
-    return gaussian_distribution
