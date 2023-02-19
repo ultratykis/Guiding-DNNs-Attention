@@ -23,9 +23,6 @@ class Uncertainty:
         self.batch = batch
         self.sample_type = sample_type
         self.num_classes = num_classes
-        self.best_loss = 0.0
-        self.running_loss = 0.0
-        self.best_acc = [0.0, 0.0, 0.0]
         indices = list(range(len(train_set)))
         random.shuffle(indices)
         self.labeled_set_id = indices[:self.added_number]
@@ -67,10 +64,6 @@ class Uncertainty:
             # Training and test
             self.train(checkpoint_dir)
             self.best_acc = self.test()
-
-            msg = "{}, {}, {}, {}\n".format(
-                self.cycle, self.best_acc[0], self.best_acc[1], self.best_acc[2])
-            print(msg)
 
         #  Update the labeled dataset via loss prediction-based uncertainty measurement
 
@@ -162,8 +155,6 @@ class Uncertainty:
         return batch_total, batch_correct, batch_class_total, batch_class_correct
 
     def train(self, checkpoint_dir):
-        self.running_loss = 0.0
-        self.best_loss = 0.0
 
         savepath_best = os.path.join(
             checkpoint_dir, 'al_best.pth'.format(self.cycle))
@@ -174,7 +165,6 @@ class Uncertainty:
         for epoch in range(self.epoch):
             self.model.train()
             self.L2_loss = nn.MSELoss()
-            self.L1_loss = nn.L1Loss()
             for data in self.train_loader:
                 inputs = data[0].cuda()
                 labels = data[1].cuda()
@@ -184,7 +174,7 @@ class Uncertainty:
                 attention_loss = self.L2_loss(
                     attention_gt/224, attention_peak/224)
 
-                click_nega_loss = data[2].cuda().to(torch.float32).mean()
+                click_nega_loss = data[2].cuda().to(torch.float32)
 
                 loss_g = click_nega_loss + attention_loss
 
@@ -193,40 +183,17 @@ class Uncertainty:
                 predication = self.model(inputs)
                 loss_c = self.criterion(predication, labels)
 
-                loss = loss_c + loss_g
+                loss = loss_c + 3*loss_g
                 loss.backward()
                 self.optimizer.step()
 
-                self.running_loss += loss.item()
-
             self.scheduler.step()
-            if self.best_loss == 0.0:
-                self.best_loss = self.running_loss
-                print('epoch:', epoch, "no improvement, best loss: {}, running loss: {}".format(
-                    self.best_loss, self.running_loss))
-            elif self.best_loss > self.running_loss:
-                self.best_loss = self.running_loss
-                # Save the model as checkpoint.
-                print('epoch:', epoch, "update best loss: {}, Saving model...".format(
-                    self.best_loss))
-                torch.save(
-                    {
-                        'model_state_dict': self.model.state_dict(),
-                        'optimizer_state_dict': self.optimizer.state_dict(),
-                    }, savepath_best)
-                print("Saved best model to {}".format(savepath_best))
-            else:
-                print('epoch:', epoch, "no improvement, running loss: {}, best loss: {}".format(
-                    self.running_loss, self.best_loss))
-
-            self.running_loss = 0.0
 
         torch.save(
             {
                 'model_state_dict': self.model.state_dict(),
                 'optimizer_state_dict': self.optimizer.state_dict(),
             }, savepath_final)
-        print("Saved final model to {}".format(savepath_final))
 
     def get_uncertainty(self):
         self.model.eval()
