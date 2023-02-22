@@ -202,16 +202,16 @@ class Uncertainty:
         labeled_preds = None
 
         if self.sample_type == "attention":
-            inputs_l, labels_t, _, _, _ = next(
-                iter(self.train_loader))
-            attention_map_l = self.cam(
-                input_tensor=inputs_l.cuda(), targets=None)
+            # inputs_l, labels_t, _, _, _ = next(
+            #     iter(self.train_loader))
+            # attention_map_l = self.cam(
+            #     input_tensor=inputs_l.cuda(), targets=None)
 
             for (inputs, labels, _, _, _) in self.unlabeled_loader:
                 attention_map_unl = self.cam(
                     input_tensor=inputs.cuda(), targets=None)
                 uncertainty = torch.cat(
-                    (uncertainty, self.attention_distribution_based(attention_map_l, attention_map_unl).cuda()), 0)
+                    (uncertainty, self.attention_distribution_based(attention_map_unl).cuda()), 0)
         else:
             with torch.no_grad():
                 for (inputs, labels, _, _, _) in self.unlabeled_loader:
@@ -224,7 +224,7 @@ class Uncertainty:
                             (uncertainty, self.entropy_based(preds)), 0)
                         uncertainty = torch.abs(torch.sub(uncertainty, 0.5))
 
-                    elif self.sample_type == "diversity" or self.sample_type == "attention":
+                    elif self.sample_type == "diversity":
                         labeled_preds = torch.tensor([]).cuda()
                         inputs_l, labels_t, _, _, _ = next(
                             iter(self.train_loader))
@@ -264,10 +264,10 @@ class Uncertainty:
 
         return dists
 
-    def attention_distribution_based(self, labeled, unlabeled):
-        self.gmm.fit(np.reshape(labeled, (labeled.shape[0], -1)))
-        scores = self.gmm.score_samples(np.reshape(
-            unlabeled, (unlabeled.shape[0], -1)))
+    def attention_distribution_based(self, unlabeled):
+        data = np.reshape(unlabeled, (unlabeled.shape[0], -1))
+        self.gmm.fit(data)
+        scores = self.gmm.score_samples(data)
         # normalize the scores
         scores = np.abs(scores / np.max(scores))
 
