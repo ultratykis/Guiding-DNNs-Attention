@@ -156,8 +156,6 @@ class Uncertainty:
 
     def train(self, checkpoint_dir):
 
-        savepath_best = os.path.join(
-            checkpoint_dir, 'al_best.pth'.format(self.cycle))
         savepath_final = os.path.join(
             checkpoint_dir, 'al_latest.pth'.format(self.cycle))
 
@@ -182,12 +180,11 @@ class Uncertainty:
 
                 loss_g = neg_loss + attention_loss
 
-                self.optimizer.zero_grad()
-
                 predication = self.model(inputs)
                 loss_c = self.criterion(predication, labels)
 
                 loss = loss_c + 3*loss_g
+                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
