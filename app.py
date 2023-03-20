@@ -4,17 +4,17 @@ import os
 import cv2
 import numpy as np
 import torch
+import torch.nn as nn
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 from pytorch_grad_cam import GradCAM
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
-from torchvision import models
-
+from torchvision import models, datasets
+from lib.utils import *
 from lib.uncertainty import Uncertainty
 from lib.click_label_event import *
 from lib.data import ImageFolderWithMarkers
-from lib.models.resnet import data_transform
 
 app = Flask(__name__, static_folder='./dist/static',
             template_folder='./dist')
@@ -198,10 +198,12 @@ def load_network():
     print(train_set.class_to_idx)
     num_classes = len(train_set.class_to_idx)
     class_labels = train_set.classes
-    network = models.resnet18(num_classes=num_classes)
+    # network = models.resnet18(num_classes=num_classes)
 
-    network.load_state_dict(torch.load(
-        pretrained_network_file, map_location=torch.device('cuda'))['model_state_dict'])
+    # network.load_state_dict(torch.load(
+    #     pretrained_network_file, map_location=torch.device('cuda'))['model_state_dict'])
+    network = models.resnet50(pretrained=True)
+    network.fc = nn.Linear(2048, 2)
 
     active_learning = Uncertainty(network.cuda(), added_number, train_set, uncertainty_train_set, test_set, val_set,
                                   train_batch_size, subset_number=512, sample_type=candidates_sampling_strategy, num_classes=num_classes)
@@ -246,7 +248,7 @@ def show_next():
                                    show_batch_size:show_iter*show_batch_size+show_batch_size]
     cam = GradCAM(model=active_learning.model, target_layers=[
         active_learning.model.layer4[-1]], use_cuda=True)
-    grad_cam = cam(input_tensor=inputs.cuda(), targets=None)
+    grad_cam = cam(input_tensor=inputs.cuda(), targets=labels.cuda(),)
     print("cycle: " + str(cycle) + ' iter: ' + str(show_iter))
     set_image_labels(grad_cam, inputs, labels, indices)
 
@@ -313,21 +315,22 @@ def get_guidance(random_points=False):
             if len(label_widget.neg_region) != 0:
                 for y, x in label_widget.neg_region:
                     nega_click[y, x] = 0.0
-                mu = cv2.moments(nega_click*255, False)
-                if mu['m00'] != 0:
-                    attention_peak = np.array([
-                        int(mu['m10'] / mu['m00']), int(mu['m01'] / mu['m00'])])
-                else:
-                    attention_peak = np.array([0, 0])
+                # mu = cv2.moments(nega_click*255, False)
+                # if mu['m00'] != 0:
+                #     attention_peak = np.array([
+                #         int(mu['m10'] / mu['m00']), int(mu['m01'] / mu['m00'])])
+                # else:
+                #     attention_peak = np.array([0, 0])
+                # attention_peak = get_barycentric(nega_click)
 
-        path, target, neg_loss, refined_markers, attention_peak_temp = active_learning.train_set.samples[
+        path, target, markers, neg_regions, gt_peak, attention_peak_temp = active_learning.train_set.samples[
             label_widget.data_id]
 
-        neg_loss = (np.array(label_widget.grad_cam) -
-                    np.array(nega_click)).mean()
+        # neg_loss = (np.array(label_widget.grad_cam) -
+        #             np.array(nega_click)).mean()
 
         active_learning.train_set.samples[label_widget.data_id] = (
-            path, target, neg_loss, attention_gt, attention_peak)  # set marker
+            path, target, label_widget.grad_cam, nega_click, attention_gt, attention_peak)  # set marker
 
     print("finished cycle:", cycle, "show iter:", show_iter)
 
@@ -380,4 +383,4 @@ def get_random_neg(img):
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)

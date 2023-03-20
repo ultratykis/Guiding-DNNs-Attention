@@ -13,8 +13,9 @@ class ImageFolderWithMarkers(ImageFolder):
 
         for i, s in enumerate(tqdm(self.samples, desc='>> Loading dataset...', total=len(self.samples))):
             s = list(s)
-            # s.append(torch.zeros([224, 224]).numpy())   # add markers
-            s.append(0.)                                # add markers
+            s.append(torch.zeros([224, 224]).numpy())   # add markers
+            # add markers
+            s.append(torch.zeros([224, 224]).numpy())
             s.append(torch.zeros([2]).numpy())          # add gt
             s.append(torch.zeros([2]).numpy())          # add attention_peak
             # s.append(torch.zeros([224, 224]).numpy())   # add nega_click
@@ -23,18 +24,18 @@ class ImageFolderWithMarkers(ImageFolder):
             self.samples[i] = tuple(s)
 
     def __getitem__(self, index):
-        # path, target, markers, refined_markers, attention_peak, nega_click, data_id = self.samples[
-        #     index]
-
-        path, target, neg_loss, refined_markers, attention_peak = self.samples[
+        path, target, markers, refined_markers, attention_peak, nega_click, data_id = self.samples[
             index]
+
+        # path, target, neg_loss, refined_markers, attention_peak = self.samples[
+        #     index]
         sample = self.loader(path)
         if self.transform is not None:
             sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return sample, target, neg_loss, refined_markers, attention_peak
+        return sample, target, markers, refined_markers, refined_markers, attention_peak
 
 
 class UnNormalize(object):

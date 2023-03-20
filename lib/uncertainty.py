@@ -161,22 +161,26 @@ class Uncertainty:
         savepath_final = os.path.join(
             checkpoint_dir, 'al_latest.pth'.format(self.cycle))
 
+        self.L2_loss = nn.MSELoss()
+        self.L1_loss = nn.L1Loss()
         print("Training...")
         for epoch in range(self.epoch):
             self.model.train()
-            self.L2_loss = nn.MSELoss()
             for data in self.train_loader:
                 inputs = data[0].cuda()
                 labels = data[1].cuda()
 
-                attention_gt = data[3]
-                attention_peak = data[4]
+                gt_grad_cam = data[2].cuda()
+                neg_clicked = data[3].cuda()
+
+                neg_loss = self.L1_loss(gt_grad_cam, neg_clicked)
+
+                attention_gt = data[4]
+                attention_peak = data[5]
                 attention_loss = self.L2_loss(
-                    attention_gt/224, attention_peak/224)
+                    (attention_gt/224).float(), (attention_peak/224).float())
 
-                click_nega_loss = data[2].cuda().to(torch.float32)
-
-                loss_g = click_nega_loss + attention_loss
+                loss_g = neg_loss + attention_loss
 
                 self.optimizer.zero_grad()
 
